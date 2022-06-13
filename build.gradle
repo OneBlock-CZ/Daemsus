@@ -3,7 +3,7 @@ plugins {
     id 'java-library'
 }
 
-group 'cz.projectzet'
+group 'cz.projectzet.core'
 version '0.1.0-DEV.0'
 
 java {
