@@ -1,21 +1,19 @@
 plugins {
     id 'java'
+    id 'java-library'
 }
-
-group 'cz.projectzet'
-version '0.1.0-DEV.0'
 
 repositories {
     mavenCentral()
 }
 
-java {
-    toolchain {
-        languageVersion = JavaLanguageVersion.of(17)
-    }
-}
-
 dependencies {
+
+    api 'org.slf4j:slf4j-api:1.7.36'
+    api 'com.google.guava:guava:31.1-jre'
+
+    api 'org.jetbrains:annotations:23.0.0'
+
     testImplementation 'org.junit.jupiter:junit-jupiter-api:5.8.2'
     testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.8.2'
 }
