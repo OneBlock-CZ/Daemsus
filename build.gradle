@@ -1,25 +1,13 @@
-plugins {
-    id 'java'
-}
+subprojects {
+    group 'cz.projectzet'
+    version '0.1.0-DEV.0'
 
-group 'cz.projectzet'
-version '0.1.0-DEV.0'
+    repositories {
+        mavenLocal()
+        mavenCentral()
 
-repositories {
-    mavenCentral()
-}
-
-java {
-    toolchain {
-        languageVersion = JavaLanguageVersion.of(17)
+        maven {
+            url 'https://jitpack.io'
+        }
     }
-}
-
-dependencies {
-    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.8.2'
-    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.8.2'
-}
-
-test {
-    useJUnitPlatform()
 }

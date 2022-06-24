@@ -1,5 +1,6 @@
 plugins {
     id 'java'
+    id 'java-library'
 }
 
 repositories {
@@ -7,10 +8,29 @@ repositories {
 }
 
 dependencies {
-    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.8.1'
-    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.8.1'
+    api project(":Core")
+
+    api 'org.spongepowered:configurate-hocon:4.1.2'
+
+    // Messages
+    api 'com.github.kyngs:LegacyMessage:0.1.1'
+    compileOnly 'net.kyori:adventure-api:4.11.0'
+    compileOnly 'net.kyori:adventure-text-minimessage:4.11.0'
+
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.8.2'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.8.2'
 }
 
 test {
     useJUnitPlatform()
+}
+
+compileJava {
+    options.encoding('UTF-8') // Why the heck do I have to do this?
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
 }

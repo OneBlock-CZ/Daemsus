@@ -1,8 +1,8 @@
-package cz.projectzet.daemsus.util;
+package cz.projectzet.core.util;
 
 import com.google.common.graph.Graph;
-import cz.projectzet.daemsus.AbstractDaemon;
-import cz.projectzet.daemsus.BootLoader;
+import cz.projectzet.core.AbstractDaemon;
+import cz.projectzet.core.BootLoader;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -13,7 +13,7 @@ import java.util.stream.Collectors;
 @SuppressWarnings("UnstableApiUsage")
 public class DependencyUtil {
 
-    public static <B extends BootLoader<B>> Collection<Class<? extends AbstractDaemon<B>>> constructLoadingQueue(Graph<Class<? extends AbstractDaemon<B>>> graph) {
+    public static <B extends BootLoader> Collection<Class<? extends AbstractDaemon<B>>> constructLoadingQueue(Graph<Class<? extends AbstractDaemon<B>>> graph) {
         List<Class<? extends AbstractDaemon<B>>> sorted = new ArrayList<>();
         Map<Class<? extends AbstractDaemon<B>>, Mark> marks = new HashMap<>();
 
@@ -24,9 +24,9 @@ public class DependencyUtil {
         return sorted;
     }
 
-    private static <B extends BootLoader<B>> void visitNode(Graph<Class<? extends AbstractDaemon<B>>> dependencyGraph, Class<? extends AbstractDaemon<B>> current,
-                                                            Map<Class<? extends AbstractDaemon<B>>, Mark> visited, List<Class<? extends AbstractDaemon<B>>> sorted,
-                                                            Deque<Class<? extends AbstractDaemon<B>>> currentDependencyScanStack) {
+    private static <B extends BootLoader> void visitNode(Graph<Class<? extends AbstractDaemon<B>>> dependencyGraph, Class<? extends AbstractDaemon<B>> current,
+                                                         Map<Class<? extends AbstractDaemon<B>>, Mark> visited, List<Class<? extends AbstractDaemon<B>>> sorted,
+                                                         Deque<Class<? extends AbstractDaemon<B>>> currentDependencyScanStack) {
         Mark mark = visited.getOrDefault(current, Mark.NOT_VISITED);
         if (mark == Mark.VISITED) {
             // Visited this node already, nothing to do.

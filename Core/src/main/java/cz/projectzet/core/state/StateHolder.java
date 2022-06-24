@@ -1,4 +1,4 @@
-package cz.projectzet.daemsus.state;
+package cz.projectzet.core.state;
 
 /**
  * This is used to hold the state. Even though thread-safe, it could be written better.

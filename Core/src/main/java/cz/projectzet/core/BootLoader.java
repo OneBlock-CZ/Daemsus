@@ -1,13 +1,11 @@
-package cz.projectzet.daemsus;
+package cz.projectzet.core;
 
 import org.slf4j.Logger;
 
 import java.io.File;
 import java.io.InputStream;
 
-public interface BootLoader<B extends BootLoader<B>> {
-
-    SystemDaemon<B> getSystemDaemon();
+public interface BootLoader {
 
     Logger getSystemLogger();
 

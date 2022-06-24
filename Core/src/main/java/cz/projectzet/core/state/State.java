@@ -1,4 +1,4 @@
-package cz.projectzet.daemsus.state;
+package cz.projectzet.core.state;
 
 public enum State {
     INITIALIZED, LOADING, POST_LOADING, LOADED, STARTING, POST_STARTING, STARTED, STOPPING, UNLOADING, UNLOADED, PANICKING, PANICKED

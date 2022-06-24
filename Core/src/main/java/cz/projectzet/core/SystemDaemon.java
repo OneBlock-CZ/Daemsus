@@ -1,62 +1,66 @@
-package cz.projectzet.daemsus;
+package cz.projectzet.core;
 
 import com.google.common.graph.GraphBuilder;
+import com.google.common.graph.Graphs;
 import com.google.common.graph.MutableGraph;
-import cz.projectzet.daemsus.state.StateHolder;
-import cz.projectzet.daemsus.util.DependencyUtil;
-import cz.projectzet.daemsus.util.InjectDaemon;
-import cz.projectzet.daemsus.util.InjectMeta;
-import cz.projectzet.daemsus.util.ReflectionUtil;
+import cz.projectzet.core.state.StateHolder;
+import cz.projectzet.core.util.ReflectionUtil;
 import org.slf4j.Logger;
 
 import java.lang.reflect.Constructor;
 import java.util.*;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.function.Predicate;
 
-import static cz.projectzet.daemsus.state.State.*;
+import static cz.projectzet.core.state.State.*;
 
 @SuppressWarnings({"UnstableApiUsage", "unchecked"})
-public class SystemDaemon<B extends BootLoader<B>> {
+public class SystemDaemon {
 
-    private final B bootLoader;
+    private final BootLoader bootLoader;
+    private final ExecutorService executor;
     private final StateHolder state;
-    private final MutableGraph<Class<? extends AbstractDaemon<B>>> registeredDaemons;
-    private final Map<Class<AbstractDaemon<B>>, AbstractDaemon<B>> loadedDaemons;
-    private final List<AbstractDaemon<B>> startedDaemons;
-    private final Predicate<Class<? extends AbstractDaemon<B>>> daemonFilter;
+    private final Set<Class<? extends AbstractDaemon<?>>> registeredDaemons;
+    private final Map<Class<AbstractDaemon<?>>, AbstractDaemon<?>> loadedDaemons;
+    private final MutableGraph<Class<? extends AbstractDaemon<?>>> daemonDependencyGraph;
+    private final Map<Class<? extends AbstractDaemon<?>>, CountDownLatch> loadingLatches;
+    private final List<AbstractDaemon<?>> startedDaemons;
+    private final Predicate<Class<? extends AbstractDaemon<?>>> daemonFilter;
     private Logger logger;
 
-    public SystemDaemon(B bootLoader, Predicate<Class<? extends AbstractDaemon<B>>> daemonFilter) {
+    public SystemDaemon(BootLoader bootLoader, Predicate<Class<? extends AbstractDaemon<?>>> daemonFilter) {
         this.bootLoader = bootLoader;
         this.daemonFilter = daemonFilter;
 
-        this.registeredDaemons = GraphBuilder
-                .directed()
+        this.registeredDaemons = new HashSet<>();
+        this.loadedDaemons = new LinkedHashMap<>();
+        this.loadingLatches = new HashMap<>();
+        this.startedDaemons = new ArrayList<>();
+        this.daemonDependencyGraph = GraphBuilder.directed()
                 .allowsSelfLoops(false)
                 .build();
-        this.loadedDaemons = new LinkedHashMap<>();
-        this.startedDaemons = new ArrayList<>();
 
         this.state = new StateHolder(INITIALIZED);
+        this.executor = Executors.newWorkStealingPool(Runtime.getRuntime().availableProcessors());
     }
 
-    public B getBootLoader() {
+    public Map<Class<AbstractDaemon<?>>, AbstractDaemon<?>> getLoadedDaemons() {
+        return loadedDaemons;
+    }
+
+    public BootLoader getBootLoader() {
         return bootLoader;
     }
 
-    public void register(Class<? extends AbstractDaemon<B>> daemonClass) {
+    public void register(Class<? extends AbstractDaemon<?>> daemonClass) {
         if (!daemonFilter.test(daemonClass)) {
             return;
         }
         state.requireStates(() -> {
-            registeredDaemons.addNode(daemonClass);
-
-            var dependencies = ReflectionUtil.getDependencies(daemonClass);
-
-            for (var dependency : dependencies) {
-                registeredDaemons.putEdge(daemonClass, dependency);
-            }
-
+            registeredDaemons.add(daemonClass);
+            daemonDependencyGraph.addNode(daemonClass);
         }, INITIALIZED);
     }
 
@@ -65,29 +69,18 @@ public class SystemDaemon<B extends BootLoader<B>> {
 
         state.setStateOrThrow(LOADING, INITIALIZED);
 
-        for (Class<? extends AbstractDaemon<B>> node : registeredDaemons.nodes()) {
-            var conflicts = ReflectionUtil.getConflictingDaemons(node);
+        for (Class<? extends AbstractDaemon<?>> daemon : registeredDaemons) {
+            var conflicts = ReflectionUtil.getConflictingDaemons(daemon);
 
             for (var conflict : conflicts) {
-                if (registeredDaemons.nodes().contains(conflict)) {
-                    logger.error("Daemon {} conflicts with {}", node.getName(), conflict.getName());
+                if (registeredDaemons.contains(conflict)) {
+                    logger.error("Daemon {} conflicts with {}", daemon.getName(), conflict.getName());
                     panic();
                 }
             }
         }
 
-        for (Class<? extends AbstractDaemon<B>> node : registeredDaemons.nodes()) {
-            registeredDaemons.successors(node).forEach(dependency -> {
-                if (!registeredDaemons.nodes().contains(dependency)) {
-                    logger.error("Daemon {} depends on {}, however, it is not available", node.getName(), dependency.getName());
-                    panic();
-                }
-            });
-        }
-
-        var order = DependencyUtil.constructLoadingQueue(registeredDaemons);
-
-        order.forEach(this::loadDaemon);
+        registeredDaemons.forEach(this::loadDaemon);
 
         state.setStateOrThrow(POST_LOADING, LOADING);
 
@@ -96,47 +89,30 @@ public class SystemDaemon<B extends BootLoader<B>> {
         state.setStateOrThrow(LOADED, POST_LOADING);
     }
 
-    private void loadDaemon(Class<? extends AbstractDaemon<B>> clazz) {
-        try {
-            AbstractDaemon<B> instance;
+    private void loadDaemon(Class<? extends AbstractDaemon<?>> clazz) {
+        executor.submit(() -> {
             try {
-                Constructor<? extends AbstractDaemon<B>> constructor = clazz.getDeclaredConstructor();
-                constructor.setAccessible(true);
+                AbstractDaemon<?> instance;
+                try {
+                    Constructor<? extends AbstractDaemon<?>> constructor = clazz.getDeclaredConstructor(getClass());
 
-                instance = constructor.newInstance();
-            } catch (NoSuchMethodException e) {
-                var unsafe = ReflectionUtil.UNSAFE;
+                    constructor.setAccessible(true);
 
-                if (unsafe == null) {
-                    throw new IllegalStateException("Unsafe is not available and an no-arg constructor is not available for class " + clazz.getName());
+                    instance = constructor.newInstance(this);
+                } catch (NoSuchMethodException e) {
+                    throw new IllegalArgumentException("Daemon class " + clazz.getName() + " does not have a constructor with one argument of type " + getClass().getName());
                 }
-                instance = (AbstractDaemon<B>) unsafe.allocateInstance(clazz);
+
+                loadedDaemons.put((Class<AbstractDaemon<?>>) clazz, instance);
+                instance.getState().setStateOrThrow(POST_LOADING, LOADING);
+                getLoadingLatch(clazz).countDown();
+            } catch (Exception e) {
+                reactToDaemonException(e, clazz.getSimpleName(), "Exception while loading daemon {}");
             }
-
-            Class<?> toInject = clazz;
-
-            while (toInject != Object.class) {
-                var dependencies = ReflectionUtil.getDependencies(clazz).stream()
-                        .map(loadedDaemons::get)
-                        .toArray(AbstractDaemon[]::new);
-
-                ReflectionUtil.inject(InjectMeta.class, toInject, instance,
-                        bootLoader, this
-                );
-
-                ReflectionUtil.inject(InjectDaemon.class, toInject, instance, (Object[]) dependencies);
-
-                toInject = toInject.getSuperclass();
-            }
-
-            loadedDaemons.put((Class<AbstractDaemon<B>>) clazz, instance);
-            instance.getState().setStateOrThrow(POST_LOADING, LOADING);
-        } catch (Exception e) {
-            reactToDaemonException(e, clazz.getSimpleName(), "Exception while loading daemon {}");
-        }
+        });
     }
 
-    private void postLoadDaemon(AbstractDaemon<B> daemon) {
+    private void postLoadDaemon(AbstractDaemon<?> daemon) {
         daemon.getState().requireStatesOrThrow(POST_LOADING);
         try {
             daemon.postLoad();
@@ -162,6 +138,7 @@ public class SystemDaemon<B extends BootLoader<B>> {
     private void panic() {
         state.setStateOrThrow(PANICKING, LOADING, POST_LOADING, STARTING, POST_STARTING);
         logger.error("PANIC - PANIC - PANIC");
+        executor.shutdownNow();
         logger.info("Stopping all daemons");
         startedDaemons.forEach(this::stopDaemon);
         logger.info("All daemons stopped");
@@ -182,7 +159,7 @@ public class SystemDaemon<B extends BootLoader<B>> {
         state.setStateOrThrow(UNLOADED, UNLOADING);
     }
 
-    private void unLoadDaemon(AbstractDaemon<B> daemon) {
+    private void unLoadDaemon(AbstractDaemon<?> daemon) {
         daemon.getState().setStateOrThrow(UNLOADING, LOADED);
         try {
             daemon.unLoad();
@@ -204,7 +181,7 @@ public class SystemDaemon<B extends BootLoader<B>> {
         state.setStateOrThrow(LOADED, STOPPING);
     }
 
-    private void stopDaemon(AbstractDaemon<B> daemon) {
+    private void stopDaemon(AbstractDaemon<?> daemon) {
         daemon.getState().setStateOrThrow(STOPPING, STARTED);
         try {
             daemon.stop();
@@ -226,7 +203,7 @@ public class SystemDaemon<B extends BootLoader<B>> {
         state.setStateOrThrow(STARTED, POST_STARTING);
     }
 
-    private void postStartDaemon(AbstractDaemon<B> daemon) {
+    private void postStartDaemon(AbstractDaemon<?> daemon) {
         daemon.getState().requireStatesOrThrow(POST_STARTING);
         try {
             daemon.postStart();
@@ -236,7 +213,7 @@ public class SystemDaemon<B extends BootLoader<B>> {
         daemon.getState().setStateOrThrow(STARTED, POST_STARTING);
     }
 
-    private void startDaemon(AbstractDaemon<B> daemon) {
+    private void startDaemon(AbstractDaemon<?> daemon) {
         daemon.getState().setStateOrThrow(STARTING, LOADED);
         try {
             daemon.start();
@@ -245,6 +222,29 @@ public class SystemDaemon<B extends BootLoader<B>> {
             reactToDaemonException(e, daemon.getClass().getSimpleName(), "Exception while starting daemon {}");
         }
         daemon.getState().setStateOrThrow(POST_STARTING, STARTING);
+    }
+
+    protected <B extends BootLoader, D extends AbstractDaemon<B>> D obtainDependency(AbstractDaemon<?> caller, Class<D> clazz) {
+        synchronized (daemonDependencyGraph) {
+            daemonDependencyGraph.putEdge((Class<? extends AbstractDaemon<?>>) caller.getClass(), clazz);
+            if (Graphs.hasCycle(daemonDependencyGraph)) {
+                throw new IllegalStateException("Detected a cyclic dependency between daemons %s and %s".formatted(caller.getClass().getSimpleName(), clazz.getSimpleName()));
+            }
+        }
+
+        var latch = getLoadingLatch(clazz);
+
+        try {
+            latch.await();
+            return (D) loadedDaemons.get(clazz);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+
+    }
+
+    private CountDownLatch getLoadingLatch(Class<? extends AbstractDaemon<?>> clazz) {
+        return loadingLatches.computeIfAbsent(clazz, k -> new CountDownLatch(1));
     }
 
 }
