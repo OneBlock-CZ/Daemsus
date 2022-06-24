@@ -82,10 +82,11 @@ public class SystemDaemon {
 
         registeredDaemons.forEach(this::loadDaemon);
 
-        for (CountDownLatch value : loadingLatches.values()) {
+        for (Class<? extends AbstractDaemon<?>> registeredDaemon : registeredDaemons) {
+            var latch = getLoadingLatch(registeredDaemon);
             try {
-                value.await();
-            } catch (InterruptedException ignored) {
+                latch.await();
+            } catch (InterruptedException e) {
                 loadedDaemons.values().forEach(this::unLoadDaemon);
             }
         }
