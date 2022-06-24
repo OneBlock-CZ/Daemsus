@@ -9,9 +9,7 @@ import org.slf4j.Logger;
 
 import java.lang.reflect.Constructor;
 import java.util.*;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.*;
 import java.util.function.Predicate;
 
 import static cz.projectzet.core.state.State.*;
@@ -80,14 +78,17 @@ public class SystemDaemon {
             }
         }
 
-        registeredDaemons.forEach(this::loadDaemon);
+        var futures = new HashSet<Future<?>>();
 
-        for (Class<? extends AbstractDaemon<?>> registeredDaemon : registeredDaemons) {
-            var latch = getLoadingLatch(registeredDaemon);
+        for (Class<? extends AbstractDaemon<?>> daemon : registeredDaemons) {
+            futures.add(loadDaemon(daemon));
+        }
+
+        for (Future<?> future : futures) {
             try {
-                latch.await();
-            } catch (InterruptedException e) {
-                loadedDaemons.values().forEach(this::unLoadDaemon);
+                future.get();
+            } catch (InterruptedException | ExecutionException e) {
+                throw new RuntimeException(e);
             }
         }
 
@@ -98,9 +99,8 @@ public class SystemDaemon {
         state.setStateOrThrow(LOADED, POST_LOADING);
     }
 
-    private void loadDaemon(Class<? extends AbstractDaemon<?>> clazz) {
-        executor.submit(() -> {
-            System.out.println("HMM");
+    private Future<?> loadDaemon(Class<? extends AbstractDaemon<?>> clazz) {
+        return executor.submit(() -> {
             try {
                 AbstractDaemon<?> instance;
                 try {
