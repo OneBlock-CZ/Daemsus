@@ -100,6 +100,7 @@ public class SystemDaemon {
 
     private void loadDaemon(Class<? extends AbstractDaemon<?>> clazz) {
         executor.submit(() -> {
+            System.out.println("HMM");
             try {
                 AbstractDaemon<?> instance;
                 try {
