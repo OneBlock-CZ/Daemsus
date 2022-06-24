@@ -12,6 +12,8 @@ dependencies {
 
     api 'org.spongepowered:configurate-hocon:4.1.2'
 
+    api 'com.github.ben-manes.caffeine:caffeine:3.1.1'
+
     // Messages
     api 'com.github.kyngs:LegacyMessage:0.1.1'
     compileOnly 'net.kyori:adventure-api:4.11.0'
