@@ -82,6 +82,14 @@ public class SystemDaemon {
 
         registeredDaemons.forEach(this::loadDaemon);
 
+        for (CountDownLatch value : loadingLatches.values()) {
+            try {
+                value.await();
+            } catch (InterruptedException ignored) {
+                loadedDaemons.values().forEach(this::unLoadDaemon);
+            }
+        }
+
         state.setStateOrThrow(POST_LOADING, LOADING);
 
         loadedDaemons.values().forEach(this::postLoadDaemon);
