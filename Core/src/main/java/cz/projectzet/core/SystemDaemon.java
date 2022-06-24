@@ -248,6 +248,13 @@ public class SystemDaemon {
 
         var latch = getLoadingLatch(clazz);
 
+        synchronized (latch) {
+            if (!registeredDaemons.contains(clazz)) {
+                registeredDaemons.add(clazz);
+                loadDaemon(clazz);
+            }
+        }
+
         try {
             latch.await();
             return (D) loadedDaemons.get(clazz);
