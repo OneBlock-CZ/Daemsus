@@ -34,7 +34,7 @@ public class SystemDaemon {
 
         this.registeredDaemons = new HashSet<>();
         this.loadedDaemons = new LinkedHashMap<>();
-        this.loadingLatches = new HashMap<>();
+        this.loadingLatches = new ConcurrentHashMap<>();
         this.startedDaemons = new ArrayList<>();
         this.daemonDependencyGraph = GraphBuilder.directed()
                 .allowsSelfLoops(false)
@@ -249,9 +249,11 @@ public class SystemDaemon {
         var latch = getLoadingLatch(clazz);
 
         synchronized (latch) {
-            if (!registeredDaemons.contains(clazz)) {
-                registeredDaemons.add(clazz);
-                loadDaemon(clazz);
+            synchronized (registeredDaemons) {
+                if (!registeredDaemons.contains(clazz)) {
+                    registeredDaemons.add(clazz);
+                    loadDaemon(clazz);
+                }
             }
         }
 
