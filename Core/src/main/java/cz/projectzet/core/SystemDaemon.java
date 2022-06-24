@@ -54,7 +54,7 @@ public class SystemDaemon {
         return bootLoader;
     }
 
-    public void register(Class<? extends AbstractDaemon<?>> daemonClass) {
+    public void registerDaemon(Class<? extends AbstractDaemon<?>> daemonClass) {
         if (!daemonFilter.test(daemonClass)) {
             return;
         }
