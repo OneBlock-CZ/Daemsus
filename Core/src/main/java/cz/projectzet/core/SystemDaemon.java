@@ -9,7 +9,7 @@ import org.slf4j.Logger;
 
 import java.lang.reflect.Constructor;
 import java.util.*;
-import java.util.concurrent.*;
+import java.util.concurrent.CountDownLatch;
 import java.util.function.Predicate;
 
 import static cz.projectzet.core.state.State.*;
@@ -18,7 +18,6 @@ import static cz.projectzet.core.state.State.*;
 public class SystemDaemon {
 
     private final BootLoader bootLoader;
-    private final ExecutorService executor;
     private final StateHolder state;
     private final Set<Class<? extends AbstractDaemon<?>>> registeredDaemons;
     private final Map<Class<AbstractDaemon<?>>, AbstractDaemon<?>> loadedDaemons;
@@ -34,14 +33,13 @@ public class SystemDaemon {
 
         this.registeredDaemons = new HashSet<>();
         this.loadedDaemons = new LinkedHashMap<>();
-        this.loadingLatches = new ConcurrentHashMap<>();
+        this.loadingLatches = new HashMap<>();
         this.startedDaemons = new ArrayList<>();
         this.daemonDependencyGraph = GraphBuilder.directed()
                 .allowsSelfLoops(false)
                 .build();
 
         this.state = new StateHolder(INITIALIZED);
-        this.executor = Executors.newWorkStealingPool(Runtime.getRuntime().availableProcessors());
     }
 
     public Map<Class<AbstractDaemon<?>>, AbstractDaemon<?>> getLoadedDaemons() {
@@ -78,19 +76,7 @@ public class SystemDaemon {
             }
         }
 
-        var futures = new HashSet<Future<?>>();
-
-        for (Class<? extends AbstractDaemon<?>> daemon : registeredDaemons) {
-            futures.add(loadDaemon(daemon));
-        }
-
-        for (Future<?> future : futures) {
-            try {
-                future.get();
-            } catch (InterruptedException | ExecutionException e) {
-                throw new RuntimeException(e);
-            }
-        }
+        registeredDaemons.iterator().forEachRemaining(this::loadDaemon);
 
         state.setStateOrThrow(POST_LOADING, LOADING);
 
@@ -99,27 +85,25 @@ public class SystemDaemon {
         state.setStateOrThrow(LOADED, POST_LOADING);
     }
 
-    private Future<?> loadDaemon(Class<? extends AbstractDaemon<?>> clazz) {
-        return executor.submit(() -> {
+    private void loadDaemon(Class<? extends AbstractDaemon<?>> clazz) {
+        try {
+            AbstractDaemon<?> instance;
             try {
-                AbstractDaemon<?> instance;
-                try {
-                    Constructor<? extends AbstractDaemon<?>> constructor = clazz.getDeclaredConstructor(getClass());
+                Constructor<? extends AbstractDaemon<?>> constructor = clazz.getDeclaredConstructor(getClass());
 
-                    constructor.setAccessible(true);
+                constructor.setAccessible(true);
 
-                    instance = constructor.newInstance(this);
-                } catch (NoSuchMethodException e) {
-                    throw new IllegalArgumentException("Daemon class " + clazz.getName() + " does not have a constructor with one argument of type " + getClass().getName());
-                }
-
-                loadedDaemons.put((Class<AbstractDaemon<?>>) clazz, instance);
-                instance.getState().setStateOrThrow(POST_LOADING, LOADING);
-                getLoadingLatch(clazz).countDown();
-            } catch (Exception e) {
-                reactToDaemonException(e, clazz.getSimpleName(), "Exception while loading daemon {}");
+                instance = constructor.newInstance(this);
+            } catch (NoSuchMethodException e) {
+                throw new IllegalArgumentException("Daemon class " + clazz.getName() + " does not have a constructor with one argument of type " + getClass().getName());
             }
-        });
+
+            loadedDaemons.put((Class<AbstractDaemon<?>>) clazz, instance);
+            instance.getState().setStateOrThrow(POST_LOADING, LOADING);
+            getLoadingLatch(clazz).countDown();
+        } catch (Exception e) {
+            reactToDaemonException(e, clazz.getSimpleName(), "Exception while loading daemon {}");
+        }
     }
 
     private void postLoadDaemon(AbstractDaemon<?> daemon) {
@@ -148,7 +132,6 @@ public class SystemDaemon {
     private void panic() {
         state.setStateOrThrow(PANICKING, LOADING, POST_LOADING, STARTING, POST_STARTING);
         logger.error("PANIC - PANIC - PANIC");
-        executor.shutdownNow();
         logger.info("Stopping all daemons");
         startedDaemons.forEach(this::stopDaemon);
         logger.info("All daemons stopped");
@@ -248,13 +231,9 @@ public class SystemDaemon {
 
         var latch = getLoadingLatch(clazz);
 
-        synchronized (latch) {
-            synchronized (registeredDaemons) {
-                if (!registeredDaemons.contains(clazz)) {
-                    registeredDaemons.add(clazz);
-                    loadDaemon(clazz);
-                }
-            }
+        if (!registeredDaemons.contains(clazz)) {
+            registeredDaemons.add(clazz);
+            loadDaemon(clazz);
         }
 
         try {
