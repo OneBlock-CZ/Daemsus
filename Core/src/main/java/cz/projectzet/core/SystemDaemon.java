@@ -225,6 +225,10 @@ public class SystemDaemon {
     }
 
     protected <B extends BootLoader, D extends AbstractDaemon<B>> D obtainDependency(AbstractDaemon<?> caller, Class<D> clazz) {
+        if (caller.getClass().isAssignableFrom(clazz)) {
+            return (D) caller;
+        }
+
         synchronized (daemonDependencyGraph) {
             daemonDependencyGraph.putEdge((Class<? extends AbstractDaemon<?>>) caller.getClass(), clazz);
             if (Graphs.hasCycle(daemonDependencyGraph)) {
