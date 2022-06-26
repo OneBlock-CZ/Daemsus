@@ -225,13 +225,18 @@ public class SystemDaemon {
         daemon.getState().setStateOrThrow(POST_STARTING, STARTING);
     }
 
-    protected <B extends BootLoader, D extends AbstractDaemon<B>> D obtainDependency(AbstractDaemon<?> caller, Class<D> clazz) {
+    protected <B extends BootLoader, D extends AbstractDaemon<B>> D obtainDependency(AbstractDaemon<?> caller, Class<D> clazz, boolean nullOnCycle) {
         if (caller.getClass().isAssignableFrom(clazz)) {
             return (D) caller;
         }
 
         daemonDependencyGraph.putEdge((Class<? extends AbstractDaemon<?>>) caller.getClass(), clazz);
         if (Graphs.hasCycle(daemonDependencyGraph)) {
+            if (nullOnCycle) {
+                daemonDependencyGraph.removeEdge((Class<? extends AbstractDaemon<?>>) caller.getClass(), clazz);
+                return null;
+            }
+
             throw new IllegalStateException("Detected a cyclic dependency between daemons %s and %s".formatted(caller.getClass().getSimpleName(), clazz.getSimpleName()));
         }
 
