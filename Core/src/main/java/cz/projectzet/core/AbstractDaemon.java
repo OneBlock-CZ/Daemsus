@@ -39,6 +39,9 @@ public abstract class AbstractDaemon<B extends BootLoader> {
     protected void stop() {
     }
 
+    /**
+     * <b>This method may be run before {@link #postLoad()}</b>
+     */
     protected void unLoad() {
     }
 
