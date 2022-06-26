@@ -149,7 +149,7 @@ public class SystemDaemon {
     }
 
     public void unLoad() {
-        state.setStateOrThrow(UNLOADING, LOADED, POST_LOADING);
+        state.setStateOrThrow(UNLOADING, LOADED);
         var reversed = new ArrayList<>(loadedDaemons.values());
 
         Collections.reverse(reversed);
@@ -159,7 +159,7 @@ public class SystemDaemon {
     }
 
     private void unLoadDaemon(AbstractDaemon<?> daemon) {
-        daemon.getState().setStateOrThrow(UNLOADING, LOADED);
+        daemon.getState().setStateOrThrow(UNLOADING, LOADED, POST_LOADING);
         try {
             daemon.unLoad();
         } catch (Exception e) {
