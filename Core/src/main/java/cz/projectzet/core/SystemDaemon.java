@@ -73,7 +73,9 @@ public class SystemDaemon {
             }
         }
 
-        registeredDaemons.iterator().forEachRemaining(this::loadDaemon);
+        var clone = new HashSet<>(registeredDaemons);
+
+        clone.forEach(this::loadDaemon);
 
         state.setStateOrThrow(POST_LOADING, LOADING);
 
