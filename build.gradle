@@ -1,6 +1,6 @@
 subprojects {
     group 'cz.projectzet'
-    version '0.1.0-DEV.0'
+    version '0.1.0'
 
     repositories {
         mavenLocal()
