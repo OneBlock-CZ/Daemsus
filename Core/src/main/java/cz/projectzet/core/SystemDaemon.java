@@ -9,7 +9,6 @@ import org.slf4j.Logger;
 
 import java.lang.reflect.Constructor;
 import java.util.*;
-import java.util.concurrent.CountDownLatch;
 import java.util.function.Predicate;
 
 import static cz.projectzet.core.state.State.*;
@@ -22,7 +21,6 @@ public class SystemDaemon {
     private final Set<Class<? extends AbstractDaemon<?>>> registeredDaemons;
     private final Map<Class<AbstractDaemon<?>>, AbstractDaemon<?>> loadedDaemons;
     private final MutableGraph<Class<? extends AbstractDaemon<?>>> daemonDependencyGraph;
-    private final Map<Class<? extends AbstractDaemon<?>>, CountDownLatch> loadingLatches;
     private final List<AbstractDaemon<?>> startedDaemons;
     private final Predicate<Class<? extends AbstractDaemon<?>>> daemonFilter;
     private Logger logger;
@@ -33,7 +31,6 @@ public class SystemDaemon {
 
         this.registeredDaemons = new HashSet<>();
         this.loadedDaemons = new LinkedHashMap<>();
-        this.loadingLatches = new HashMap<>();
         this.startedDaemons = new ArrayList<>();
         this.daemonDependencyGraph = GraphBuilder.directed()
                 .allowsSelfLoops(false)
@@ -85,11 +82,11 @@ public class SystemDaemon {
         state.setStateOrThrow(LOADED, POST_LOADING);
     }
 
-    private void loadDaemon(Class<? extends AbstractDaemon<?>> clazz) {
+    private <D extends AbstractDaemon<?>> D loadDaemon(Class<D> clazz) {
         try {
-            AbstractDaemon<?> instance;
+            D instance;
             try {
-                Constructor<? extends AbstractDaemon<?>> constructor = clazz.getDeclaredConstructor(getClass());
+                Constructor<D> constructor = clazz.getDeclaredConstructor(getClass());
 
                 constructor.setAccessible(true);
 
@@ -100,9 +97,10 @@ public class SystemDaemon {
 
             loadedDaemons.put((Class<AbstractDaemon<?>>) clazz, instance);
             instance.getState().setStateOrThrow(POST_LOADING, LOADING);
-            getLoadingLatch(clazz).countDown();
+            return instance;
         } catch (Exception e) {
             reactToDaemonException(e, clazz.getSimpleName(), "Exception while loading daemon {}");
+            return null;
         }
     }
 
@@ -133,10 +131,18 @@ public class SystemDaemon {
         state.setStateOrThrow(PANICKING, LOADING, POST_LOADING, STARTING, POST_STARTING);
         logger.error("PANIC - PANIC - PANIC");
         logger.info("Stopping all daemons");
-        startedDaemons.forEach(this::stopDaemon);
+        var reversed = new ArrayList<>(startedDaemons);
+
+        Collections.reverse(reversed);
+
+        reversed.forEach(this::stopDaemon);
         logger.info("All daemons stopped");
         logger.info("Unloading all daemons");
-        loadedDaemons.values().forEach(this::unLoadDaemon);
+        var reversed2 = new ArrayList<>(loadedDaemons.values());
+
+        Collections.reverse(reversed2);
+
+        reversed2.forEach(this::unLoadDaemon);
         logger.info("All daemons unloaded");
         logger.error("PANIC - PANIC - PANIC");
         System.exit(1);
@@ -222,31 +228,14 @@ public class SystemDaemon {
             return (D) caller;
         }
 
-        synchronized (daemonDependencyGraph) {
-            daemonDependencyGraph.putEdge((Class<? extends AbstractDaemon<?>>) caller.getClass(), clazz);
-            if (Graphs.hasCycle(daemonDependencyGraph)) {
-                throw new IllegalStateException("Detected a cyclic dependency between daemons %s and %s".formatted(caller.getClass().getSimpleName(), clazz.getSimpleName()));
-            }
+        daemonDependencyGraph.putEdge((Class<? extends AbstractDaemon<?>>) caller.getClass(), clazz);
+        if (Graphs.hasCycle(daemonDependencyGraph)) {
+            throw new IllegalStateException("Detected a cyclic dependency between daemons %s and %s".formatted(caller.getClass().getSimpleName(), clazz.getSimpleName()));
         }
 
-        var latch = getLoadingLatch(clazz);
+        registeredDaemons.add(clazz);
 
-        if (!registeredDaemons.contains(clazz)) {
-            registeredDaemons.add(clazz);
-            loadDaemon(clazz);
-        }
-
-        try {
-            latch.await();
-            return (D) loadedDaemons.get(clazz);
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-        }
-
-    }
-
-    private CountDownLatch getLoadingLatch(Class<? extends AbstractDaemon<?>> clazz) {
-        return loadingLatches.computeIfAbsent(clazz, k -> new CountDownLatch(1));
+        return loadDaemon(clazz);
     }
 
 }
