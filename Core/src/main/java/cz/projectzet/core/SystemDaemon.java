@@ -1,5 +1,7 @@
 package cz.projectzet.core;
 
+import com.google.common.collect.HashMultimap;
+import com.google.common.collect.Multimap;
 import com.google.common.graph.GraphBuilder;
 import com.google.common.graph.Graphs;
 import com.google.common.graph.MutableGraph;
@@ -9,6 +11,7 @@ import org.slf4j.Logger;
 
 import java.lang.reflect.Constructor;
 import java.util.*;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
 
 import static cz.projectzet.core.state.State.*;
@@ -23,6 +26,7 @@ public class SystemDaemon {
     private final MutableGraph<Class<? extends AbstractDaemon<?>>> daemonDependencyGraph;
     private final List<AbstractDaemon<?>> startedDaemons;
     private final Predicate<Class<? extends AbstractDaemon<?>>> daemonFilter;
+    private final Multimap<Class<? extends AbstractDaemon<?>>, Consumer<AbstractDaemon<?>>> whenLoaded;
     private Logger logger;
 
     public SystemDaemon(BootLoader bootLoader, Predicate<Class<? extends AbstractDaemon<?>>> daemonFilter) {
@@ -32,6 +36,7 @@ public class SystemDaemon {
         this.registeredDaemons = new HashSet<>();
         this.loadedDaemons = new LinkedHashMap<>();
         this.startedDaemons = new ArrayList<>();
+        this.whenLoaded = HashMultimap.create();
         this.daemonDependencyGraph = GraphBuilder.directed()
                 .allowsSelfLoops(false)
                 .build();
@@ -99,6 +104,7 @@ public class SystemDaemon {
 
             loadedDaemons.put((Class<AbstractDaemon<?>>) clazz, instance);
             instance.getState().setStateOrThrow(POST_LOADING, LOADING);
+            whenLoaded.get(clazz).forEach(consumer -> consumer.accept(instance));
             return instance;
         } catch (Exception e) {
             reactToDaemonException(e, clazz.getSimpleName(), "Exception while loading daemon {}");
@@ -243,6 +249,16 @@ public class SystemDaemon {
         registeredDaemons.add(clazz);
 
         return loadedDaemons.containsKey(clazz) ? (D) loadedDaemons.get(clazz) : loadDaemon(clazz);
+    }
+
+    public <B extends BootLoader, D extends AbstractDaemon<B>> void whenLoaded(Class<D> clazz, Consumer<D> consumer) {
+        var loaded = loadedDaemons.get(clazz);
+
+        if (loaded != null) {
+            consumer.accept((D) loaded);
+        } else {
+            whenLoaded.put(clazz, k -> consumer.accept((D) k));
+        }
     }
 
 }

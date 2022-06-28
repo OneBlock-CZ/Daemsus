@@ -5,6 +5,8 @@ import cz.projectzet.core.state.StateHolder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.function.Consumer;
+
 public abstract class AbstractDaemon<B extends BootLoader> {
 
     private final StateHolder state = new StateHolder(State.LOADING);
@@ -25,6 +27,10 @@ public abstract class AbstractDaemon<B extends BootLoader> {
 
     protected <D extends AbstractDaemon<B>, B extends BootLoader> D obtainWeakDependency(Class<D> daemonClass) {
         return systemDaemon.obtainDependency(this, daemonClass, true);
+    }
+
+    protected <D extends AbstractDaemon<B>, B extends BootLoader> void whenLoaded(Class<D> clazz, Consumer<D> consumer) {
+        systemDaemon.whenLoaded(clazz, consumer);
     }
 
     protected StateHolder getState() {
