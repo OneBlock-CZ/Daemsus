@@ -242,7 +242,7 @@ public class SystemDaemon {
 
         registeredDaemons.add(clazz);
 
-        return (D) loadedDaemons.computeIfAbsent((Class<AbstractDaemon<?>>) clazz, this::loadDaemon);
+        return loadedDaemons.containsKey(clazz) ? (D) loadedDaemons.get(clazz) : loadDaemon(clazz);
     }
 
 }
