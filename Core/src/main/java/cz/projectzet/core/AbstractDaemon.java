@@ -20,7 +20,11 @@ public abstract class AbstractDaemon<B extends BootLoader> {
     }
 
     protected <D extends AbstractDaemon<B>, B extends BootLoader> D obtainDependency(Class<D> daemonClass) {
-        return systemDaemon.obtainDependency(this, daemonClass);
+        return systemDaemon.obtainDependency(this, daemonClass, false);
+    }
+
+    protected <D extends AbstractDaemon<B>, B extends BootLoader> D obtainWeakDependency(Class<D> daemonClass) {
+        return systemDaemon.obtainDependency(this, daemonClass, true);
     }
 
     protected StateHolder getState() {
