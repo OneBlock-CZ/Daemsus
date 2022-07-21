@@ -195,7 +195,7 @@ public class SystemDaemon {
     }
 
     private void stopDaemon(AbstractDaemon<?> daemon) {
-        daemon.getState().setStateOrThrow(STOPPING, STARTED);
+        daemon.getState().setStateOrThrow(STOPPING, STARTED, POST_STARTING);
         try {
             daemon.stop();
         } catch (Exception e) {
