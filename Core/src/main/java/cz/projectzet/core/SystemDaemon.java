@@ -153,6 +153,12 @@ public class SystemDaemon {
         reversed2.forEach(this::unLoadDaemon);
         logger.info("All daemons unloaded");
         logger.error("PANIC - PANIC - PANIC");
+
+        try {
+            Thread.sleep(2500);
+        } catch (InterruptedException ignored) {
+        }
+
         System.exit(1);
     }
 
