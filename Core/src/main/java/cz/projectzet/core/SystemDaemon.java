@@ -90,27 +90,31 @@ public class SystemDaemon {
     }
 
     private <D extends AbstractDaemon<?>> D loadDaemon(Class<D> clazz) {
-        return (D) loadedDaemons.computeIfAbsent((Class<AbstractDaemon<?>>) clazz, x -> {
+        var loaded = loadedDaemons.get(clazz);
+
+        if (loaded != null) {
+            return (D) loaded;
+        }
+
+        try {
+            D instance;
             try {
-                D instance;
-                try {
-                    Constructor<D> constructor = clazz.getDeclaredConstructor(getClass());
+                Constructor<D> constructor = clazz.getDeclaredConstructor(getClass());
 
-                    constructor.setAccessible(true);
+                constructor.setAccessible(true);
 
-                    instance = constructor.newInstance(this);
-                } catch (NoSuchMethodException e) {
-                    throw new IllegalArgumentException("Daemon class " + clazz.getName() + " does not have a constructor with one argument of type " + getClass().getName());
-                }
-
-                instance.getState().setStateOrThrow(POST_LOADING, LOADING);
-                whenLoaded.get(clazz).forEach(consumer -> consumer.accept(instance));
-                return instance;
-            } catch (Exception e) {
-                reactToDaemonException(e, clazz.getSimpleName(), "Exception while loading daemon {}");
-                return null;
+                instance = constructor.newInstance(this);
+            } catch (NoSuchMethodException e) {
+                throw new IllegalArgumentException("Daemon class " + clazz.getName() + " does not have a constructor with one argument of type " + getClass().getName());
             }
-        });
+
+            instance.getState().setStateOrThrow(POST_LOADING, LOADING);
+            whenLoaded.get(clazz).forEach(consumer -> consumer.accept(instance));
+            return instance;
+        } catch (Exception e) {
+            reactToDaemonException(e, clazz.getSimpleName(), "Exception while loading daemon {}");
+            return null;
+        }
     }
 
     private void postLoadDaemon(AbstractDaemon<?> daemon) {
