@@ -109,6 +109,7 @@ public class SystemDaemon {
             }
 
             instance.getState().setStateOrThrow(POST_LOADING, LOADING);
+            loadedDaemons.put((Class<AbstractDaemon<?>>) clazz, instance);
             whenLoaded.get(clazz).forEach(consumer -> consumer.accept(instance));
             return instance;
         } catch (Exception e) {
