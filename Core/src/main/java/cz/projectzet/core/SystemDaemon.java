@@ -255,7 +255,7 @@ public class SystemDaemon {
 
         registeredDaemons.add(clazz);
 
-        return loadedDaemons.containsKey(clazz) ? (D) loadedDaemons.get(clazz) : loadDaemon(clazz);
+        return loadDaemon(clazz);
     }
 
     public <B extends BootLoader, D extends AbstractDaemon<B>> void whenLoaded(Class<D> clazz, Consumer<D> consumer) {
