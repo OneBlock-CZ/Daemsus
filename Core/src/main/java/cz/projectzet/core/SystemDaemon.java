@@ -6,6 +6,7 @@ import com.google.common.graph.GraphBuilder;
 import com.google.common.graph.Graphs;
 import com.google.common.graph.MutableGraph;
 import cz.projectzet.core.state.StateHolder;
+import cz.projectzet.core.util.NeedsConfigurationException;
 import cz.projectzet.core.util.ReflectionUtil;
 import org.slf4j.Logger;
 
@@ -27,11 +28,15 @@ public class SystemDaemon {
     private final List<AbstractDaemon<?>> startedDaemons;
     private final Predicate<Class<? extends AbstractDaemon<?>>> daemonFilter;
     private final Multimap<Class<? extends AbstractDaemon<?>>, Consumer<AbstractDaemon<?>>> whenLoaded;
+    private final Set<AbstractDaemon<?>> needsConfiguration;
+    private final AbstractDaemon<?> dummyDaemon;
     private Logger logger;
 
     public SystemDaemon(BootLoader bootLoader, Predicate<Class<? extends AbstractDaemon<?>>> daemonFilter) {
         this.bootLoader = bootLoader;
         this.daemonFilter = daemonFilter;
+        this.dummyDaemon = new AbstractDaemon<>(this) {
+        };
 
         this.registeredDaemons = new HashSet<>();
         this.loadedDaemons = new LinkedHashMap<>();
@@ -40,8 +45,13 @@ public class SystemDaemon {
         this.daemonDependencyGraph = GraphBuilder.directed()
                 .allowsSelfLoops(false)
                 .build();
+        this.needsConfiguration = new HashSet<>();
 
         this.state = new StateHolder(INITIALIZED);
+    }
+
+    public void addDaemonInNeedOfConfiguration(AbstractDaemon<?> daemon) {
+        needsConfiguration.add(daemon);
     }
 
     public Map<Class<AbstractDaemon<?>>, AbstractDaemon<?>> getLoadedDaemons() {
@@ -82,6 +92,13 @@ public class SystemDaemon {
 
         clone.forEach(this::loadDaemon);
 
+        needsConfiguration.forEach(daemon -> logger.warn("Daemon {} needs configuration", daemon.getShortName()));
+
+        if (!needsConfiguration.isEmpty()) {
+            logger.warn("Some daemons need to be configured. Please configure them.");
+            panic();
+        }
+
         state.setStateOrThrow(POST_LOADING, LOADING);
 
         loadedDaemons.values().forEach(this::postLoadDaemon);
@@ -93,6 +110,9 @@ public class SystemDaemon {
         var loaded = loadedDaemons.get(clazz);
 
         if (loaded != null) {
+            if (loaded == dummyDaemon) {
+                throw new NeedsConfigurationException();
+            }
             return (D) loaded;
         }
 
@@ -113,6 +133,9 @@ public class SystemDaemon {
             whenLoaded.get(clazz).forEach(consumer -> consumer.accept(instance));
             return instance;
         } catch (Exception e) {
+            if (e instanceof NeedsConfigurationException) {
+                loadedDaemons.put((Class<AbstractDaemon<?>>) clazz, dummyDaemon);
+            }
             reactToDaemonException(e, clazz.getSimpleName(), "Exception while loading daemon {}");
             return null;
         }

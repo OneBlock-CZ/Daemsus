@@ -3,6 +3,7 @@ package cz.projectzet.core.configuration;
 import cz.projectzet.core.BootLoader;
 import cz.projectzet.core.ProjectDaemon;
 import cz.projectzet.core.SystemDaemon;
+import cz.projectzet.core.util.NeedsConfigurationException;
 
 import java.io.File;
 import java.io.IOException;
@@ -37,7 +38,8 @@ public class ConfigurationDaemon extends ProjectDaemon<BootLoader> {
 
             try {
                 if (config.load(daemon.repairConfiguration())) {
-                    throw new NewConfigurationException();
+                    systemDaemon.addDaemonInNeedOfConfiguration(daemon);
+                    throw new NeedsConfigurationException();
                 }
             } catch (CorruptedConfigurationException | IOException e) {
                 throw new RuntimeException(e);
