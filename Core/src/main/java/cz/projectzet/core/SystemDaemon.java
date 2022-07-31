@@ -283,7 +283,13 @@ public class SystemDaemon {
 
         registeredDaemons.add(clazz);
 
-        return loadDaemon(clazz);
+        var result = loadDaemon(clazz);
+
+        if (result == null) {
+            throw new NeedsConfigurationException();
+        }
+
+        return result;
     }
 
     public <B extends BootLoader, D extends AbstractDaemon<B>> void whenLoaded(Class<D> clazz, Consumer<D> consumer) {
