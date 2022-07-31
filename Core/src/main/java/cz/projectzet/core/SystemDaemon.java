@@ -11,6 +11,7 @@ import cz.projectzet.core.util.ReflectionUtil;
 import org.slf4j.Logger;
 
 import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
 import java.util.*;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
@@ -133,8 +134,11 @@ public class SystemDaemon {
             whenLoaded.get(clazz).forEach(consumer -> consumer.accept(instance));
             return instance;
         } catch (Exception e) {
-            if (e instanceof NeedsConfigurationException) {
-                loadedDaemons.put((Class<AbstractDaemon<?>>) clazz, dummyDaemon);
+            if (e instanceof InvocationTargetException inv) {
+                if (inv.getCause() instanceof NeedsConfigurationException) {
+                    loadedDaemons.put((Class<AbstractDaemon<?>>) clazz, dummyDaemon);
+                }
+                return null;
             }
             reactToDaemonException(e, clazz.getSimpleName(), "Exception while loading daemon {}");
             return null;
