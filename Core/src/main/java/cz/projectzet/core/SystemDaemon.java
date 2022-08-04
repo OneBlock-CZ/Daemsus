@@ -137,8 +137,8 @@ public class SystemDaemon {
             if (e instanceof InvocationTargetException inv) {
                 if (inv.getCause() instanceof NeedsConfigurationException) {
                     loadedDaemons.put((Class<AbstractDaemon<?>>) clazz, dummyDaemon);
+                    return null;
                 }
-                return null;
             }
             reactToDaemonException(e, clazz.getSimpleName(), "Exception while loading daemon {}");
             return null;
