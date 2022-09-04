@@ -1,5 +1,5 @@
 subprojects {
-    group 'cz.projectzet'
+    group 'cz.oneblock'
     version '0.1.14'
 
     repositories {
