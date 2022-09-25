@@ -54,7 +54,7 @@ public class ConfigurateConfiguration {
         }
 
         try {
-            if (!repair || newlyCreated) {
+            if (repair || newlyCreated) {
                 configuration = new ConfigurateSection(loader.load()
                         .mergeFrom(reference));
             } else {
