@@ -1,7 +1,7 @@
 package cz.oneblock.core.cooldown;
 
+import cz.oneblock.core.AbstractDaemon;
 import cz.oneblock.core.BootLoader;
-import cz.oneblock.core.ProjectDaemon;
 import cz.oneblock.core.SystemDaemon;
 
 import java.time.Duration;
@@ -10,7 +10,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
-public class CoolDownDaemon extends ProjectDaemon<BootLoader> {
+public class CoolDownDaemon extends AbstractDaemon<BootLoader> {
 
     private final Map<String, RateLimiter<Object>> rateLimiters;
 
